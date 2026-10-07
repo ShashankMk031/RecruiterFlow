@@ -4,4 +4,6 @@ __pycache__/
 .pytest_cache/
 *.db
 .DS_Store
-.freebuff/
+.freebuff/ 
+run.md 
+architecture.md 

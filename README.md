@@ -1,50 +1,53 @@
-# RecruiterFlow — Recruiter Bot Backend
+# RecruiterFlow — Recruiter Bot
 
-A lightweight candidate-job matchmaking service built with **FastAPI** and **SQLite3**, utilizing hand-written raw SQL exclusively (zero ORMs).
+A small backend prototype built in Python with FastAPI and SQLite. It matches fictional candidates with job openings using raw, hand-written SQL queries (no ORMs).
 
-## Setup & Running Locally
+---
 
-1. **Create and activate a virtual environment:**
+## How to Run
+
+1. **Set up a virtual environment and install dependencies:**
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
+   pip install -r requirements.txt
    ```
-2. **Install dependencies:**
-   ```bash
-   pip install fastapi "uvicorn[standard]"
-   ```
-3. **Initialize and seed the database:**
+
+2. **Seed the database:**
    ```bash
    python seed.py
    ```
-4. **Start the API server:**
+   This creates the SQLite schema (`recruiterflow.db`) and ingests all candidates, jobs, and normalized skills.
+
+3. **Start the API server:**
    ```bash
    uvicorn main:app --reload
    ```
-- Interactive Swagger UI: `http://localhost:8000/docs`
-- Endpoints:
-  - `GET /jobs/{id}/matches` — Ranked candidate matches for a job
-  - `GET /candidates/{id}/matches` — Ranked job matches for a candidate
+   Interactive Swagger docs are live at `http://localhost:8000/docs`.
+
+4. **Run the tests:**
+   ```bash
+   pytest -v test_api.py
+   ```
 
 ---
 
-## Design Decisions & Trade-offs
+## Architecture
 
-### Schema Design: Normalized Skills Junction Table
-Rather than storing skills as denormalized comma-separated strings or JSON blobs, we normalized them into dedicated `skills`, `candidate_skills`, and `job_skills` tables. Storing delimited strings in rows violates First Normal Form (1NF), prevents B-tree index utilization, and necessitates inefficient `LIKE '%skill%'` full-table scans. Using indexed foreign keys on junction tables allows SQLite to perform relational set intersections and aggregations (`COUNT(DISTINCT ...)`, `GROUP_CONCAT(...)`) directly in the database engine with minimal overhead.
+### 1. Database & Schema Design
+We used Python's standard `sqlite3` library with hand-written DDL and parameterized queries throughout.
 
-### Matching Algorithm: Scoring & Weighting
-The matching algorithm scores matches on a 0–100 scale, reflecting real-world recruitment mechanics:
-- **Skill Overlap (55 pts max):** Computed as `(matched_skills / total_required_skills) * 55`. Technical capability is the primary gate—seniority cannot compensate for an absence of core competencies.
-- **Experience Fit (30 pts max):** Functions as a qualification gate. Candidates meeting or exceeding the minimum experience receive a 25-point baseline plus a seniority bonus (+1 pt/yr surplus, capped at 5 pts). Underqualified candidates are penalized heavily (`(exp / min_exp) * 12`), ensuring they cannot outrank qualified applicants.
-- **Availability (10 pts) & Culture (5 pts):** Act as tie-breakers. High hiring velocity candidates (`Immediate`: 10 pts, `2 weeks`: 7 pts) score higher than passive candidates (`Not looking`: 2 pts). Keyword alignment between candidate traits and team culture awards up to 5 points.
+The core database decision was **normalizing skills into junction tables** (`skills`, `candidate_skills`, and `job_skills`) rather than storing comma-separated strings or JSON lists. Storing delimited strings violates 1NF and forces slow `LIKE '%skill%'` full-table scans. With junction tables:
+- Finding skill overlap between a candidate and a job becomes a clean, indexed `JOIN`.
+- SQLite computes set intersections, `COUNT(DISTINCT ...)`, and `GROUP_CONCAT(...)` in a single query pass.
+- Foreign keys with `ON DELETE CASCADE` ensure referential integrity.
 
-Each match outputs an explainable, human-readable reason string summarizing skill coverage, experience delta, availability, and culture alignment.
+### 2. Matching Algorithm & Scoring
+Matches are scored on a **0 to 100** scale, modeled after how recruiters actually evaluate profiles:
 
----
+- **Skill Overlap (55 pts max):** This is the primary gate. We take the ratio of matched skills to total required skills (`(matched / total) * 55`). If someone lacks the core skills, experience alone shouldn't qualify them.
+- **Experience Fit (30 pts max):** Acts as a threshold. If a candidate meets or exceeds the job's minimum experience, they get a baseline 25 points plus a seniority buffer (+1 pt/yr surplus, capped at 5 pts). If they fall below the minimum, their score drops sharply (`(exp / min_exp) * 12`), ensuring underqualified candidates don't outrank qualified applicants.
+- **Availability (10 pts):** Hiring speed matters. Immediate availability scores 10 points, a standard 2-week notice scores 7 points, and passive candidates ("Not looking") score 2 points.
+- **Culture / Traits (5 pts):** A light tie-breaker awarded when a candidate's traits intersect with the team's culture keywords.
 
-## AI Tools Used
-
-<!-- EDIT THIS SECTION: Detail your AI tools usage below -->
-- **Tools Used:** [e.g., ChatGPT / Claude / GitHub Copilot / Antigravity]
-- **Where & How:** [e.g., Assisted in scaffolding boilerplate, formulating regex patterns for ingestion, and sanity-checking SQL window functions. Architecture, SQL queries, DDL normalization, and scoring weights were designed, verified, and debugged manually.]
+Every match returns an explainable **reason string** (e.g. `"Full skill match (3/3: deduction, forensics, pattern-recognition); exceeds min experience by 5 yrs (8 vs 3); immediately available"`) so recruiters know exactly why someone is ranked where they are.
