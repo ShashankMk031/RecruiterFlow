@@ -1,31 +1,27 @@
-# RecruiterFlow — Recruiter Bot
-
-A small backend prototype built in Python with FastAPI and SQLite. It matches fictional candidates with job openings using raw, hand-written SQL queries (no ORMs).
-
----
+# RecruiterFlow — Recruiter Bot - Assignment - UVCE
 
 ## How to Run
 
-1. **Set up a virtual environment and install dependencies:**
+1. Run venv 
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
-2. **Seed the database:**
+2. Create SQLite schema and ingest data
    ```bash
    python seed.py
    ```
-   This creates the SQLite schema (`recruiterflow.db`) and ingests all candidates, jobs, and normalized skills.
+
 
 3. **Start the API server:**
    ```bash
    uvicorn main:app --reload
    ```
-   Interactive Swagger docs are live at `http://localhost:8000/docs`.
+   Docs are live at `http://localhost:8000/docs`.
 
-4. **Run the tests:**
+4. Test API.
    ```bash
    pytest -v test_api.py
    ```
@@ -35,9 +31,9 @@ A small backend prototype built in Python with FastAPI and SQLite. It matches fi
 ## Architecture
 
 ### 1. Database & Schema Design
-We used Python's standard `sqlite3` library with hand-written DDL and parameterized queries throughout.
+Used Python's `sqlite3` library with hand-written DDL and parameterized queries throughout.
 
-The core database decision was **normalizing skills into junction tables** (`skills`, `candidate_skills`, and `job_skills`) rather than storing comma-separated strings or JSON lists. Storing delimited strings violates 1NF and forces slow `LIKE '%skill%'` full-table scans. With junction tables:
+Core database decision was **normalizing skills into junction tables** (`skills`, `candidate_skills`, and `job_skills`) rather than storing comma-separated strings or JSON lists. Storing delimited strings violates 1NF and forces slow `LIKE '%skill%'` full-table scans. With junction tables:
 - Finding skill overlap between a candidate and a job becomes a clean, indexed `JOIN`.
 - SQLite computes set intersections, `COUNT(DISTINCT ...)`, and `GROUP_CONCAT(...)` in a single query pass.
 - Foreign keys with `ON DELETE CASCADE` ensure referential integrity.
